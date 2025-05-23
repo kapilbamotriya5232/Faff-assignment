@@ -1,10 +1,10 @@
 // app/components/chat/ChatInterface.tsx
 'use client';
 
+import { useSocket } from '@/app/context/SocketContext'; // Make sure this path is correct
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { UserMin } from '../tasks/TaskItem'; // Or a shared types file
 import ChatMessageItem, { MessageType } from './ChatMessageItem'; //
-import { useSocket } from '@/app/context/SocketContext'; // Make sure this path is correct
 
 interface ChatInterfaceProps {
   taskId: string; //
@@ -24,8 +24,6 @@ export default function ChatInterface({ taskId, currentUser, onInputFocus }: Cha
   const messagesEndRef = useRef<HTMLDivElement | null>(null); //
   const messageListRef = useRef<HTMLDivElement | null>(null); //
 
-  // Your scrollToBottom using messagesEndRef.current?.scrollIntoView is fine.
-  // The alternative using messageListRef.current.scrollTop also works.
   const scrollToBottom = useCallback(() => { // Wrapped in useCallback
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); //
   }, []);
@@ -42,7 +40,6 @@ export default function ChatInterface({ taskId, currentUser, onInputFocus }: Cha
       }
       const fetchedMessages: MessageType[] = await response.json();
       setMessages(fetchedMessages);
-      // Scroll to bottom after messages are initially loaded slightly deferred
       setTimeout(() => scrollToBottom(), 50); //
     } catch (err) {
       console.error("Error in fetchMessages:", err); //
@@ -50,20 +47,18 @@ export default function ChatInterface({ taskId, currentUser, onInputFocus }: Cha
     } finally {
       setIsLoadingMessages(false); //
     }
-  }, [taskId, scrollToBottom]); // Added scrollToBottom to dependency array
+  }, [taskId, scrollToBottom]);
 
   useEffect(() => { //
     fetchMessages();
   }, [fetchMessages]);
 
-  // Auto-scroll when messages array changes (new messages added)
   useEffect(() => { //
     if (!isLoadingMessages) { // Only scroll if not initially loading
         scrollToBottom();
     }
-  }, [messages, isLoadingMessages, scrollToBottom]); // Added isLoadingMessages & scrollToBottom
+  }, [messages, isLoadingMessages, scrollToBottom]);
 
-  // Effect for Socket.IO room management and message listening
   useEffect(() => { //
     if (socket && isSocketConnected && taskId) {
       const roomName = `task-chat-${taskId}`;
@@ -71,31 +66,27 @@ export default function ChatInterface({ taskId, currentUser, onInputFocus }: Cha
       socket.emit('join-task-chat', taskId); //
 
       const handleNewChatMessage = (incomingMessage: MessageType) => {
+        // Ignore own messages (optimistic + broadcast) to prevent duplicates
+        if (incomingMessage.senderId === currentUser.id) {
+          console.log('[ChatInterface] Ignoring own message broadcast', incomingMessage.id);
+          return;
+        }
         console.log('[ChatInterface] WebSocket event: new-chat-message received', incomingMessage);
-        // Ensure incoming message has a taskId (it should, due to updated MessageType)
         if (!incomingMessage.taskId) {
             console.error("[ChatInterface] Received message via WebSocket without taskId:", incomingMessage);
             return;
         }
         if (incomingMessage.taskId === taskId) {
-          // If the message is from the current user, it was already added optimistically
-          // and then potentially updated by the POST response.
-          // Socket.IO's `io.to(room).emit()` by default does NOT send to the emitter.
-          // So, we typically don't need to check `incomingMessage.senderId === currentUser.id` here
-          // if that default behavior is relied upon.
-          // The main goal is to add messages from *other* users.
-          // And to ensure no duplicates if, for some reason, the server did echo.
           setMessages(prevMessages => {
             if (prevMessages.find(m => m.id === incomingMessage.id)) {
-              console.log('[ChatInterface] Message already exists by ID (possibly updated from POST), not re-adding from socket:', incomingMessage.id);
-              // Optionally, ensure it's the latest version if content could differ (unlikely for new messages)
+              console.log('[ChatInterface] Message already exists, not re-adding:', incomingMessage.id);
               return prevMessages.map(m => m.id === incomingMessage.id ? incomingMessage : m);
             }
             console.log('[ChatInterface] Adding new message from WebSocket to state:', incomingMessage);
             return [...prevMessages, incomingMessage];
           });
         } else {
-          console.log(`[ChatInterface] Received message for different task (${incomingMessage.taskId}), current task is ${taskId}. Ignoring.`);
+          console.log(`[ChatInterface] Received message for different task (${incomingMessage.taskId}), ignoring.`);
         }
       };
 
@@ -107,7 +98,7 @@ export default function ChatInterface({ taskId, currentUser, onInputFocus }: Cha
         socket.off('new-chat-message', handleNewChatMessage); //
       };
     }
-  }, [socket, isSocketConnected, taskId, currentUser.id]); // currentUser.id added for completeness if used in handler
+  }, [socket, isSocketConnected, taskId, currentUser.id]);
 
   const handleSendMessage = async (e?: React.FormEvent<HTMLFormElement>) => { //
     if (e) e.preventDefault();
