@@ -1,16 +1,21 @@
 // app/api/tasks/[taskId]/messages/route.ts
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server'; // Changed Request to NextRequest
 import { prisma } from '@/lib/prisma'; // Your prisma instance
 import { getIO } from '@/lib/socket-io-server'; // Get the Socket.IO instance
 
 const MESSAGES_INITIAL_LOAD_LIMIT = 30;
 
-interface MessageParams {
-  taskId: string;
-}
+// The MessageParams interface can be removed if it was only used for this,
+// or kept if used elsewhere. For the handlers, we'll inline the type.
+// interface MessageParams {
+//   taskId: string;
+// }
 
-// GET messages for a task (No changes from your last provided version)
-export async function GET(request: Request, { params }: { params: MessageParams }) {
+// GET messages for a task
+export async function GET(
+  request: NextRequest, // Changed to NextRequest
+  { params }: { params: { taskId: string } } // Inlined params type
+) {
   const { taskId } = params;
   if (!taskId) return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
   console.log(`[API Messages GET] Attempting to fetch messages for taskId: ${taskId}`);
@@ -21,8 +26,12 @@ export async function GET(request: Request, { params }: { params: MessageParams 
       take: MESSAGES_INITIAL_LOAD_LIMIT,
       include: { sender: { select: { id: true, name: true, email: true } } },
     });
-    if (!messages) {
-        return NextResponse.json([], { status: 200 });
+    if (!messages) { // Note: findMany returns [], not null/undefined if no records found.
+                     // This check might be redundant if an empty array is a valid response.
+                     // Consider what !messages would evaluate to. It will likely always be false for an array.
+                     // Perhaps you meant `if (messages.length === 0)` for a specific handling,
+                     // but returning an empty array is fine as per your original code: NextResponse.json([], { status: 200 });
+        return NextResponse.json([], { status: 200 }); // Kept original logic
     }
     console.log(`[API Messages GET] Found ${messages.length} messages for taskId: ${taskId}`);
     return NextResponse.json(messages.reverse());
@@ -33,7 +42,10 @@ export async function GET(request: Request, { params }: { params: MessageParams 
 }
 
 // POST a new message to a task
-export async function POST(request: Request, { params }: { params: MessageParams }) {
+export async function POST(
+  request: NextRequest, // Changed to NextRequest
+  { params }: { params: { taskId: string } } // Inlined params type
+) {
   const { taskId } = params;
   const io = getIO(); // Get the Socket.IO instance
 
@@ -61,8 +73,6 @@ export async function POST(request: Request, { params }: { params: MessageParams
     // Emit WebSocket event to the specific task room
     if (io) {
       const roomName = `task-chat-${taskId}`;
-      // Emitting to all clients in the room including the sender.
-      // Client can choose to ignore if it's their own message and already handled optimistically.
       io.to(roomName).emit('new-chat-message', newMessage);
       console.log(`[API Messages POST] Emitted 'new-chat-message' to room ${roomName} for message ID: ${newMessage.id}`);
     } else {
