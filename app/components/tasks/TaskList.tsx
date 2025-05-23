@@ -1,10 +1,10 @@
 // app/components/tasks/TaskList.tsx
 'use client'
 
+import { useSocket } from '@/app/context/SocketContext'
+import { UserMin as CurrentUserType } from '@/app/page'; // For currentUser prop type
 import { useCallback, useEffect, useState } from 'react'
 import TaskItem, { Task } from './TaskItem'
-import { useSocket } from '@/app/context/SocketContext'
-import { UserMin as CurrentUserType } from '@/app/page' // For currentUser prop type
 
 interface UserMin {
   id: string
@@ -24,8 +24,9 @@ interface TaskListResponse {
 interface TaskListProps {
   filters: { status?: string; assignedToId?: string }
   allUsers: UserMin[]
-  currentUser: CurrentUserType // <<<< ADD THIS
+  currentUser: CurrentUserType
   listRefreshKey: number
+  onOpenTaskModal: (task: Task) => void
 }
 
 export default function TaskList({
@@ -33,8 +34,8 @@ export default function TaskList({
   allUsers,
   currentUser,
   listRefreshKey,
+  onOpenTaskModal,
 }: TaskListProps) {
-  // <<<< ADD currentUser here
   const { socket, isConnected: isSocketConnected } = useSocket()
 
   const [tasks, setTasks] = useState<Task[]>([])
@@ -43,9 +44,6 @@ export default function TaskList({
   const [totalTasks, setTotalTasks] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
-  // New state for managing which task item is expanded
-  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null)
 
   const fetchTasks = useCallback(
     async (page: number, currentFilters: typeof filters) => {
@@ -91,7 +89,6 @@ export default function TaskList({
 
   useEffect(() => {
     setCurrentPage(1)
-    setExpandedTaskId(null) // Collapse any open task when filters change
   }, [filters])
 
   useEffect(() => {
@@ -106,10 +103,6 @@ export default function TaskList({
             return newList.slice(0, PAGE_LIMIT)
           })
           setTotalTasks(prev => prev + 1)
-        } else {
-          console.log(
-            'New task received (Socket.IO), but not on page 1 or filters active. Consider UI notification or list refresh trigger.',
-          )
         }
       }
       const handleTaskUpdated = (updatedTask: Task) => {
@@ -146,30 +139,15 @@ export default function TaskList({
     fetchTasks,
   ])
 
-  const handleTaskUpdateInListItem = (updatedTask: Task) => {
-    setTasks(prevTasks =>
-      prevTasks.map(task => (task.id === updatedTask.id ? updatedTask : task)),
-    )
-  }
-
   const handlePreviousPage = () => {
     if (currentPage > 1) {
       setCurrentPage(prev => prev - 1)
-      setExpandedTaskId(null)
     }
   }
   const handleNextPage = () => {
     if (currentPage < totalPages) {
       setCurrentPage(prev => prev + 1)
-      setExpandedTaskId(null)
     }
-  }
-
-  // Function to handle toggling the expanded task
-  const handleToggleExpandTask = (taskId: string) => {
-    setExpandedTaskId(prevExpandedId =>
-      prevExpandedId === taskId ? null : taskId,
-    )
   }
 
   if (isLoading && tasks.length === 0 && currentPage === 1) {
@@ -233,10 +211,7 @@ export default function TaskList({
           key={task.id}
           task={task}
           allUsers={allUsers}
-          currentUser={currentUser} // <<<< PASS currentUser HERE
-          onTaskUpdate={handleTaskUpdateInListItem}
-          isExpanded={expandedTaskId === task.id}
-          onToggleExpand={() => handleToggleExpandTask(task.id)}
+          onOpenTask={() => onOpenTaskModal(task)}
         />
       ))}
 

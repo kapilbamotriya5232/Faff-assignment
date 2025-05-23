@@ -1,6 +1,6 @@
 // app/api/tasks/[taskId]/messages/route.ts
+import { prisma } from '@/lib/prisma'; // <<<< CHECK THIS PATH
 import { NextResponse } from 'next/server';
-import {prisma} from '@/lib/prisma'; // <<<< CHECK THIS PATH
 
 const MESSAGES_INITIAL_LOAD_LIMIT = 30;
 
@@ -9,10 +9,9 @@ interface MessageParams {
 }
 
 // GET messages for a task
-export async function GET(request: Request, context: { params: MessageParams }) {
-  const { params } = context;
+export async function GET(request: Request, { params }: { params: { taskId: string } }) {
+  const { taskId } = await params; // ← await params
   console.log(`[API Messages GET] Received request for messages with params:`, params);
-  const { taskId } = params; // params.taskId comes from the directory name [taskId]
 
   if (!taskId) {
     return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
@@ -49,8 +48,8 @@ export async function GET(request: Request, context: { params: MessageParams }) 
 }
 
 // POST a new message to a task
-export async function POST(request: Request, { params }: { params: MessageParams }) {
-  const { taskId } = params;
+export async function POST(request: Request, { params }: { params: { taskId: string } }) {
+  const { taskId } = await params; // ← await params
 
   if (!taskId) {
     return NextResponse.json({ error: 'Task ID is required' }, { status: 400 });
@@ -69,7 +68,6 @@ export async function POST(request: Request, { params }: { params: MessageParams
     if (!senderExists) {
       return NextResponse.json({ error: 'Invalid senderId' }, { status: 400 });
     }
-
     const newMessage = await prisma.message.create({
       data: {
         content,

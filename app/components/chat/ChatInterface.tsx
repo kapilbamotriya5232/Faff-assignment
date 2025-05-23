@@ -1,14 +1,13 @@
 // app/components/chat/ChatInterface.tsx
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import ChatMessageItem, { MessageType } from './ChatMessageItem';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { UserMin } from '../tasks/TaskItem'; // Or a shared types file
+import ChatMessageItem, { MessageType } from './ChatMessageItem';
 
 interface ChatInterfaceProps {
   taskId: string;
   currentUser: UserMin;
-  // allUsers: UserMin[]; // Might not be needed if sender info comes with message
 }
 
 export default function ChatInterface({ taskId, currentUser }: ChatInterfaceProps) {
@@ -18,26 +17,32 @@ export default function ChatInterface({ taskId, currentUser }: ChatInterfaceProp
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
 
-  const messagesEndRef = useRef<HTMLDivElement | null>(null); // For auto-scrolling
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messageListRef = useRef<HTMLDivElement | null>(null);
+
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messageListRef.current) {
+        messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
+    }
   };
-  
+
   const fetchMessages = useCallback(async () => {
     if (!taskId) return;
-    setIsLoadingMessages(true);
-    setError(null);
+    setIsLoadingMessages(true); setError(null);
     try {
       const response = await fetch(`/api/tasks/${taskId}/messages`);
       if (!response.ok) {
         const errData = await response.json();
+        console.error("Fetch messages API error:", errData);
         throw new Error(errData.error || 'Failed to fetch messages');
       }
       const fetchedMessages: MessageType[] = await response.json();
       setMessages(fetchedMessages);
+      setTimeout(() => scrollToBottom(), 0); 
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      console.error("Error in fetchMessages:", err);
+      setError(err instanceof Error ? err.message : 'An unknown error occurred fetching messages');
     } finally {
       setIsLoadingMessages(false);
     }
@@ -47,7 +52,6 @@ export default function ChatInterface({ taskId, currentUser }: ChatInterfaceProp
     fetchMessages();
   }, [fetchMessages]);
 
-  // Auto-scroll when messages change
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -56,89 +60,93 @@ export default function ChatInterface({ taskId, currentUser }: ChatInterfaceProp
     if (e) e.preventDefault();
     if (newMessageContent.trim() === '' || isSending) return;
 
-    setIsSending(true);
-    const optimisticMessage: MessageType = { // Create an optimistic message for instant UI update
-      id: `temp-${Date.now()}`, // Temporary ID
-      content: newMessageContent.trim(),
+    // ***** IMPORTANT LOGGING *****
+    console.log('[ChatInterface] Attempting to send message. Current User:', currentUser);
+    if (!currentUser || !currentUser.id) {
+        console.error('[ChatInterface] Cannot send message: currentUser or currentUser.id is missing!');
+        setError('User information is missing. Cannot send message.');
+        setIsSending(false); // Should also set this
+        return;
+    }
+    // ***************************
+
+    setIsSending(true); setError(null); // Clear previous errors before sending
+    const optimisticMessage: MessageType = {
+      id: `temp-${Date.now()}`, content: newMessageContent.trim(),
       createdAt: new Date().toISOString(),
-      sender: currentUser, // Current user is the sender
+      sender: currentUser, // Ensure currentUser has id, name, email
       senderId: currentUser.id,
     };
 
     setMessages(prevMessages => [...prevMessages, optimisticMessage]);
-    setNewMessageContent(''); // Clear input field immediately
+    setNewMessageContent('');
 
     try {
+      const payload = {
+        content: optimisticMessage.content,
+        senderId: currentUser.id, // This is the ID being sent
+      };
+      console.log('[ChatInterface] Sending payload to backend:', payload);
+
       const response = await fetch(`/api/tasks/${taskId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: optimisticMessage.content,
-          senderId: currentUser.id,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
         const errData = await response.json();
+        console.error("[ChatInterface] Send message API error response:", errData);
         throw new Error(errData.error || 'Failed to send message');
       }
       const savedMessage: MessageType = await response.json();
-      
-      // Replace optimistic message with the actual saved message from server
       setMessages(prevMessages => 
         prevMessages.map(msg => msg.id === optimisticMessage.id ? savedMessage : msg)
       );
-      // WebSocket will handle broadcasting to other clients in Phase 4
-
     } catch (err) {
-      console.error('Error sending message:', err);
+      console.error('[ChatInterface] Error in handleSendMessage catch block:', err);
       setError(err instanceof Error ? err.message : 'Failed to send message');
-      // Remove optimistic message on error
       setMessages(prevMessages => prevMessages.filter(msg => msg.id !== optimisticMessage.id));
-      setNewMessageContent(optimisticMessage.content); // Optionally restore content to input
+      setNewMessageContent(optimisticMessage.content);
     } finally {
       setIsSending(false);
-      // scrollToBottom(); // Already handled by useEffect on messages change
-    }
-  };
-  
-  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault(); // Prevent newline
-      handleSendMessage();
     }
   };
 
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
+  };
+
+  // UI Rendering (no changes from your provided code, just ensuring it's complete)
   if (isLoadingMessages) {
     return <div className="p-4 text-center text-sm text-slate-500">Loading messages...</div>;
   }
-  if (error && messages.length === 0) { // Show error only if no messages loaded
-    return <div className="p-4 text-center text-sm text-red-500">{error}</div>;
+  // Show error more prominently if messages couldn't load
+  if (error && messages.length === 0) {
+    return <div className="p-4 text-center text-sm text-red-500 bg-red-50 rounded-md">Error loading messages: {error}</div>;
   }
 
   return (
-    <div className="flex flex-col h-[400px] bg-white border border-slate-200 rounded-md shadow"> {/* Fixed height for chat area */}
-      {/* Message Display Area */}
-      <div className="flex-grow p-3 space-y-1 overflow-y-auto">
+    <div className="flex flex-col h-full bg-white">
+      <div ref={messageListRef} className="flex-grow p-3 space-y-2 overflow-y-auto">
         {messages.length === 0 && !isLoadingMessages && (
           <p className="text-sm text-slate-400 text-center py-4">No messages yet. Start the conversation!</p>
         )}
         {messages.map(msg => (
           <ChatMessageItem key={msg.id} message={msg} currentUser={currentUser} />
         ))}
-        <div ref={messagesEndRef} /> {/* Anchor for auto-scrolling */}
+        <div ref={messagesEndRef} />
       </div>
 
-      {/* Message Input Area */}
-      {error && messages.length > 0 && <p className="text-xs text-red-500 px-3 py-1">{error}</p>}
-      <div className="border-t border-slate-200 p-2.5 bg-slate-50">
+      {error && messages.length > 0 && <p className="text-xs text-red-500 px-3 py-1 text-center">{error}</p>}
+      <div className="flex-shrink-0 border-t border-slate-200 p-2.5 bg-slate-50">
         <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
           <textarea
             value={newMessageContent}
             onChange={(e) => setNewMessageContent(e.target.value)}
             onKeyDown={handleTextareaKeyDown}
             placeholder="Type your message..."
-            rows={1} // Start with 1 row, expands automatically
+            rows={1}
             className="flex-grow p-2 text-sm border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 resize-none disabled:bg-slate-100"
             disabled={isSending}
           />
