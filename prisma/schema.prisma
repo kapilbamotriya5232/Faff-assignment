@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,40 +10,33 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
 model User {
-  id        String    @id @default(cuid())
-  email     String    @unique // Essential for our simplified login
-  name      String?
-  tasks     Task[]    @relation("UserTasks")      // Tasks requested by this user
-  assignedTasks Task[] @relation("AssignedTasks") // Tasks assigned to this user
-  messages  Message[] // We'll use this in Phase 2
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  tasks         Task[]    @relation("UserTasks")
+  assignedTasks Task[]    @relation("AssignedTasks")
+  messagesSent  Message[] @relation("UserSentMessages") // Explicit relation name
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model Task {
-  id          String    @id @default(cuid())
-  title       String
-  status      String    @default("Logged") // e.g., Logged, Ongoing, Reviewed, Done, Blocked [cite: 1]
-  priority    String?   // e.g., High, Medium, Low
-  tags        String[]  // Array of strings for tags [cite: 1]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
+  id            String    @id @default(cuid())
+  title         String
+  status        String    @default("Logged")
+  priority      String?
+  tags          String[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
   requestedById String
-  requestedBy User      @relation("UserTasks", fields: [requestedById], references: [id]) // User who requested it [cite: 1]
-
-  assignedToId String?
-  assignedTo  User?     @relation("AssignedTasks", fields: [assignedToId], references: [id]) // Assigned operator [cite: 1]
-
-  messages    Message[] // We'll use this in Phase 2
-
+  requestedBy   User      @relation("UserTasks", fields: [requestedById], references: [id])
+  assignedToId  String?
+  assignedTo    User?     @relation("AssignedTasks", fields: [assignedToId], references: [id])
+  messages      Message[] @relation("TaskMessages") // Explicit relation name
   @@index([requestedById])
   @@index([assignedToId])
 }
-
-
 
 model Message {
   id        String   @id @default(cuid())
@@ -54,13 +44,18 @@ model Message {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relations
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  sender    User     @relation("UserSentMessages", fields: [senderId], references: [id]) // Matching explicit name
+  senderId  String   // Foreign key to User
   
-  taskId    String
-  task      Task     @relation(fields: [taskId], references: [id])
+  task      Task     @relation("TaskMessages", fields: [taskId], references: [id], onDelete: Cascade) // Matching explicit name, added onDelete
+  taskId    String   // Foreign key to Task
 
-  @@index([userId])
+  // For threading (Phase 5)
+  parentId  String?
+  parent    Message? @relation("Replies", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies   Message[] @relation("Replies")
+
+  @@index([senderId])
   @@index([taskId])
+  @@index([parentId])
 }
