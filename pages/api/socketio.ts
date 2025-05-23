@@ -1,37 +1,32 @@
 // pages/api/socketio.ts
 import { NextApiRequest, NextApiResponse } from 'next';
 import { Server as HttpServer } from 'http';
-import { initSocketIO } from '@/lib/socket-io-server';
-// import { Server as NetServer } from 'net'; // For type compatibility (might not be needed with 'any')
-
+import { initSocketIO, getIO } from '@/lib/socket-io-server'; // <<<< ADJUST PATH CAREFULLY
 
 interface NextApiResponseWithSocket extends NextApiResponse {
   socket: NextApiResponse["socket"] & {
     server: HttpServer & {
-      io?: ReturnType<typeof initSocketIO>;
+      // No need to store io here directly if using global
     };
   };
 }
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+export const config = { api: { bodyParser: false } };
 
 export default function socketIOHandler(
   req: NextApiRequest,
   res: NextApiResponseWithSocket
 ) {
   if (req.method === 'GET') {
-    if (!res.socket.server.io) {
-      console.log('First time setup: Initializing Socket.IO server via pages/api...');
-      const httpServer: HttpServer = res.socket.server as any;
-      initSocketIO(httpServer); // This attaches io to httpServer
+    let ioInstance = getIO(); // Check if instance exists globally
+    if (!ioInstance) {
+      console.log('[pages/api/socketio] Global Socket.IO instance not found. Initializing...');
+      const httpServerInstance: HttpServer = res.socket.server as any;
+      initSocketIO(httpServerInstance); // This will create and store it globally
     } else {
-      console.log('Socket.IO server (pages/api) already running.');
+      console.log('[pages/api/socketio] Global Socket.IO instance already available.');
     }
-    res.end();
+    res.end('Socket.IO setup check complete.');
   } else {
     res.setHeader('Allow', ['GET']);
     res.status(405).end(`Method ${req.method} Not Allowed`);

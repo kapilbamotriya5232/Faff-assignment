@@ -1,4 +1,4 @@
-// src/components/tasks/TaskList.tsx
+// app/components/tasks/TaskList.tsx
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -12,7 +12,7 @@ interface UserMin {
   email: string;
 }
 
-const PAGE_LIMIT = 5;
+const PAGE_LIMIT = 5; // You can adjust this
 
 interface TaskListResponse {
   tasks: Task[];
@@ -31,37 +31,31 @@ interface TaskListProps {
 }
 
 export default function TaskList({ filters, allUsers, listRefreshKey }: TaskListProps) {
-  const { socket, isConnected } = useSocket(); // Get socket instance
+  const { socket, isConnected: isSocketConnected } = useSocket(); // Use Socket.IO context
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [totalTasks, setTotalTasks] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchTasks = useCallback(async (page: number, currentFilters: typeof filters) => {
-    setIsLoading(true);
-    setError(null);
-    const queryParams = new URLSearchParams({
-      page: String(page),
-      limit: String(PAGE_LIMIT),
-    });
+    setIsLoading(true); setError(null);
+    const queryParams = new URLSearchParams({ page: String(page), limit: String(PAGE_LIMIT) });
     if (currentFilters.status) queryParams.append('status', currentFilters.status);
     if (currentFilters.assignedToId) queryParams.append('assignedToId', currentFilters.assignedToId);
 
     try {
       const response = await fetch(`/api/tasks?${queryParams.toString()}`);
       if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.error || `Failed to fetch tasks: ${response.statusText}`);
+        const errData = await response.json(); throw new Error(errData.error || `Error: ${response.statusText}`);
       }
       const data: TaskListResponse = await response.json();
-      setTasks(data.tasks);
-      setCurrentPage(data.currentPage);
-      setTotalPages(data.totalPages);
-      setTotalTasks(data.totalTasks);
+      setTasks(data.tasks); setCurrentPage(data.currentPage);
+      setTotalPages(data.totalPages); setTotalTasks(data.totalTasks);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      setError(err instanceof Error ? err.message : 'An unknown error occurred fetching tasks.');
       setTasks([]);
     } finally {
       setIsLoading(false);
@@ -72,52 +66,45 @@ export default function TaskList({ filters, allUsers, listRefreshKey }: TaskList
     fetchTasks(currentPage, filters);
   }, [fetchTasks, currentPage, filters, listRefreshKey]);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filters]);
+  useEffect(() => { setCurrentPage(1); }, [filters]);
 
-  // WebSocket event listeners
+  // Socket.IO event listeners
   useEffect(() => {
-    if (socket && isConnected) {
+    if (socket && isSocketConnected) {
+      console.log("TaskList: Socket.IO connected, binding events.");
+
       const handleNewTask = (newTask: Task) => {
-        console.log('WebSocket event: newTask received', newTask);
-        // Simple approach: Add to list if on page 1 and filters might match
-        // More complex: Check if newTask matches current filters
-        // For now, just re-fetch to ensure consistency if on page 1
-        // Or, if sorted by newest and on page 1, prepend optimistically
-        setTasks(prevTasks => {
-            // Avoid duplicates if already fetched
-            if (prevTasks.find(t => t.id === newTask.id)) return prevTasks;
-            // Add to the beginning if on page 1 and sorted by newest (default)
-            if (currentPage === 1) { 
-                // This assumes default sort is newest first.
-                // If filters are active, this new task might not belong.
-                // A safer bet for filtered views is to show a notification or re-fetch.
-                // Let's try adding it and then rely on filter changes to correct if needed.
-                const newTaskList = [newTask, ...prevTasks];
-                if (newTaskList.length > PAGE_LIMIT) newTaskList.pop(); // Keep page limit
-                return newTaskList;
-            }
-            return prevTasks;
-        });
-        // Potentially update total tasks count and pages, or just re-fetch
-        setTotalTasks(prev => prev + 1); 
-        // A full re-fetch might be more robust with active filters:
-        // fetchTasks(currentPage, filters);
+        console.log('Socket.IO event: newTask received', newTask);
+        if (currentPage === 1 && !filters.status && !filters.assignedToId) {
+          setTasks(prev => {
+            if (prev.find(t => t.id === newTask.id)) return prev;
+            const newList = [newTask, ...prev];
+            return newList.slice(0, PAGE_LIMIT);
+          });
+          setTotalTasks(prev => prev + 1);
+        } else {
+            console.log("New task received (Socket.IO), but not on page 1 or filters active. Consider UI notification or list refresh trigger.");
+            // To ensure it appears if filters might match, you could trigger a re-fetch:
+            // fetchTasks(currentPage, filters);
+            // Or for a less aggressive update, increment listRefreshKey from HomePage
+        }
       };
-
       const handleTaskUpdated = (updatedTask: Task) => {
-        console.log('WebSocket event: taskUpdated received', updatedTask);
-        setTasks(prevTasks =>
-          prevTasks.map(task => (task.id === updatedTask.id ? updatedTask : task))
-        );
-        // If the updated task no longer matches filters, it will be gone on next filter change/re-fetch.
+        console.log('Socket.IO event: taskUpdated received', updatedTask);
+        setTasks(prev => prev.map(t => (t.id === updatedTask.id ? updatedTask : t)));
       };
-
       const handleTaskDeleted = (data: { id: string }) => {
-        console.log('WebSocket event: taskDeleted received', data.id);
-        setTasks(prevTasks => prevTasks.filter(task => task.id !== data.id));
-        setTotalTasks(prev => prev -1);
+        console.log('Socket.IO event: taskDeleted received for id:', data.id);
+        setTasks(prev => prev.filter(t => t.id !== data.id));
+        setTotalTasks(prev => prev - 1);
+        // Consider fetching if the page becomes empty
+        // This logic can be improved: if (tasks.length === 1 && tasks[0].id === data.id && currentPage > 1)
+        if (tasks.length === 1 && currentPage > 1) { // Simplified: if last item on a page > 1
+            fetchTasks(currentPage - 1, filters);
+        } else if (tasks.length === 1 && currentPage === 1) {
+            // If it was the only task, totalTasks will go to 0, list will be empty.
+            // fetchTasks(1, filters); // Or just let it be empty.
+        }
       };
 
       socket.on('newTask', handleNewTask);
@@ -125,40 +112,54 @@ export default function TaskList({ filters, allUsers, listRefreshKey }: TaskList
       socket.on('taskDeleted', handleTaskDeleted);
 
       return () => {
+        console.log("TaskList: Unbinding Socket.IO events.");
         socket.off('newTask', handleNewTask);
         socket.off('taskUpdated', handleTaskUpdated);
         socket.off('taskDeleted', handleTaskDeleted);
       };
+    } else {
+        if (!isSocketConnected) console.log("TaskList: Socket.IO not connected, can't bind events yet.");
     }
-  }, [socket, isConnected, currentPage, filters, fetchTasks]); // Added fetchTasks to deps if used inside handlers
+  }, [socket, isSocketConnected, currentPage, filters, tasks.length, fetchTasks]); // Added tasks.length and fetchTasks
 
   const handleTaskUpdateInListItem = (updatedTask: Task) => {
+    // Optimistic update, Socket.IO event will follow for consistency
     setTasks(prevTasks =>
       prevTasks.map(task => (task.id === updatedTask.id ? updatedTask : task))
     );
   };
 
-  const handlePreviousPage = () => {
-    if (currentPage > 1) setCurrentPage(prev => prev - 1);
-  };
-  const handleNextPage = () => {
-    if (currentPage < totalPages) setCurrentPage(prev => prev - 1);
-  };
+  const handlePreviousPage = () => { if (currentPage > 1) setCurrentPage(prev => prev - 1); };
+  const handleNextPage = () => { if (currentPage < totalPages) setCurrentPage(prev => prev + 1); };
 
   if (isLoading && tasks.length === 0 && currentPage === 1) {
-    return <div className="text-center p-10">Loading tasks...</div>;
+    return (
+      <div className="text-center p-10 flex flex-col items-center justify-center h-64">
+        <svg className="animate-spin h-8 w-8 text-blue-500 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+        <p className="text-slate-500">Loading tasks...</p>
+      </div>
+    );
   }
   if (error) {
-    return <div className="text-center p-10 text-red-500">Error: {error}</div>;
+    return <div className="text-center p-10 text-red-600 bg-red-50 border border-red-200 rounded-lg">{error}</div>;
   }
-
+  
   return (
-    <div className="space-y-1">
-      {isLoading && <div className="text-xs text-gray-500 text-center py-1">Updating list...</div>}
-      {!isConnected && <div className="text-xs text-orange-500 text-center py-1">Real-time updates disconnected. Reconnecting...</div>}
+    <div className="space-y-4">
+      {!isSocketConnected && (
+        <div className="p-3 text-center text-xs text-amber-700 bg-amber-100 border border-amber-200 rounded-md">
+          Real-time updates are currently disconnected. Attempting to reconnect...
+        </div>
+      )}
       
       {tasks.length === 0 && !isLoading && (
-        <div className="text-center p-10 text-gray-500">No tasks match the current filters.</div>
+        <div className="text-center p-10 text-slate-500 bg-white rounded-lg shadow">
+            No tasks found matching your current filters.
+        </div>
+      )}
+
+      {isLoading && tasks.length > 0 && ( /* Show subtle loading when refetching */
+        <div className="text-xs text-slate-400 text-center py-1">Updating list...</div>
       )}
 
       {tasks.map(task => (
@@ -171,10 +172,19 @@ export default function TaskList({ filters, allUsers, listRefreshKey }: TaskList
       ))}
 
       {totalPages > 0 && (
-        <div className="mt-6 flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0">
-          <button onClick={handlePreviousPage} disabled={currentPage === 1 || isLoading} className="px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded-md hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed w-full sm:w-auto">Previous</button>
-          <span className="text-sm text-gray-700">Page {currentPage} of {totalPages} (Total Tasks: {totalTasks})</span>
-          <button onClick={handleNextPage} disabled={currentPage === totalPages || isLoading} className="px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded-md hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed w-full sm:w-auto">Next</button>
+        <div className="mt-8 flex flex-col sm:flex-row justify-between items-center space-y-3 sm:space-y-0">
+          <button onClick={handlePreviousPage} disabled={currentPage === 1 || isLoading} 
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-slate-300 disabled:cursor-not-allowed transition duration-150">
+            Previous
+          </button>
+          <span className="text-sm text-slate-600">
+            Page <span className="font-semibold">{currentPage}</span> of <span className="font-semibold">{totalPages}</span> 
+            <span className="hidden sm:inline"> (Total: {totalTasks} tasks)</span>
+          </span>
+          <button onClick={handleNextPage} disabled={currentPage === totalPages || isLoading} 
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-500 rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-slate-300 disabled:cursor-not-allowed transition duration-150">
+            Next
+          </button>
         </div>
       )}
     </div>

@@ -1,60 +1,59 @@
-// src/lib/socket-io-server.ts
+// app/lib/socket-io-server.ts
 import { Server as HttpServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 
-// This will hold our Socket.IO server instance once initialized.
-export let io: SocketIOServer | null = null;
+// Define a unique symbol or string for the global property
+// This helps avoid conflicts if other parts of the app use global.
+const SOCKET_IO_INSTANCE_KEY = Symbol.for('__socket_io_instance__');
 
-// Define the structure for what you might want to emit or listen for.
-// This is optional but good for type safety if you expand.
+// Augment the globalThis type to include our custom property
+type CustomGlobalThis = typeof globalThis & {
+  [SOCKET_IO_INSTANCE_KEY]?: SocketIOServer;
+};
+
+// Type assertion for globalThis to our augmented interface
+const customGlobal = globalThis as CustomGlobalThis;
+
 export interface ServerToClientEvents {
-  newTask: (task: any) => void; // Define 'any' or a proper Task type
+  newTask: (task: any) => void;
   taskUpdated: (task: any) => void;
   taskDeleted: (data: { id: string }) => void;
-  // Add chat events later: newChatMessage, userTyping, etc.
 }
+export interface ClientToServerEvents {}
+interface InterServerEvents {}
+interface SocketData {}
 
-export interface ClientToServerEvents {
-  // Example: client sends a message
-  // sendMessage: (data: { taskId: string, content: string }) => void;
-}
+export const CUSTOM_SOCKET_PATH = '/api/mycustomsocket/';
 
-interface InterServerEvents {
-  // ping: () => void;
-}
-
-interface SocketData {
-  // userId?: string; // Example: store user ID on socket connection
-}
+export const getIO = (): SocketIOServer | null => {
+  return customGlobal[SOCKET_IO_INSTANCE_KEY] || null;
+};
 
 export const initSocketIO = (httpServer: HttpServer): SocketIOServer => {
-  if (!io) {
-    io = new SocketIOServer<
-      ClientToServerEvents,
-      ServerToClientEvents,
-      InterServerEvents,
-      SocketData
-    >(httpServer, {
-      // path: '/api/socketio', // if you want a custom path for the WebSocket endpoint
-      cors: {
-        origin: "*", // Adjust for your frontend URL in production for security
-        methods: ["GET", "POST"]
-      },
-      // Add other options if needed
-    });
-    console.log('Socket.IO server initialized and attached to HTTP server.');
+  if (!customGlobal[SOCKET_IO_INSTANCE_KEY]) {
+    console.log('[socket-io-server] No global Socket.IO instance found, creating new one...');
+    const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>(
+      httpServer,
+      {
+        path: CUSTOM_SOCKET_PATH,
+        cors: {
+          origin: "*", // Adjust for production
+          methods: ["GET", "POST"],
+        },
+      }
+    );
+    customGlobal[SOCKET_IO_INSTANCE_KEY] = io; // Store the instance globally
+
+    console.log(`Socket.IO server initialized and stored globally on path: ${CUSTOM_SOCKET_PATH}`);
 
     io.on('connection', (socket: Socket) => {
-      console.log(`A client connected: ${socket.id}`);
-      // Example: Authenticate user or join rooms here if needed later
-      // socket.data.userId = ... 
-
+      console.log(`Socket.IO Client Connected (via global instance) on ${CUSTOM_SOCKET_PATH}: ${socket.id}`);
       socket.on('disconnect', (reason) => {
-        console.log(`Client disconnected: ${socket.id}, reason: ${reason}`);
+        console.log(`Socket.IO Client Disconnected (global instance) on ${CUSTOM_SOCKET_PATH}: ${socket.id}, Reason: ${reason}`);
       });
-
-      // Add more specific event listeners from clients if needed
     });
+  } else {
+    console.log('[socket-io-server] Reusing existing global Socket.IO instance.');
   }
-  return io;
+  return customGlobal[SOCKET_IO_INSTANCE_KEY]!;
 };

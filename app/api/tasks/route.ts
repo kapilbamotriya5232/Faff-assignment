@@ -1,9 +1,10 @@
-// src/app/api/tasks/route.ts
+// app/api/tasks/route.ts
 import { NextResponse } from 'next/server';
-import {prisma} from '@/lib/prisma';
+import {prisma} from '@/lib/prisma'; // Adjust path
 import { Prisma } from '@prisma/client';
-import { io as globalSocketIOInstance } from '@/lib/socket-io-server'; // Import global instance
+import { getIO } from '@/lib/socket-io-server'; // <<<< ADJUST PATH CAREFULLY
 
+// ... (TASKS_PER_PAGE, GET handler remain the same) ...
 const TASKS_PER_PAGE = 10;
 
 export async function GET(request: Request) {
@@ -46,7 +47,9 @@ export async function GET(request: Request) {
   }
 }
 
+
 export async function POST(request: Request) {
+  const io = getIO(); // Get the globally stored instance
   try {
     const data = await request.json();
     const { title, requestedById, assignedToId, status, priority, tags } = data;
@@ -63,18 +66,17 @@ export async function POST(request: Request) {
         priority: priority || null,
         tags: tags || [],
       },
-      include: { // Include relations for the emitted event
+      include: {
         requestedBy: { select: { id: true, name: true, email: true } },
         assignedTo: { select: { id: true, name: true, email: true } },
       }
     });
 
-    // Emit 'newTask' event if Socket.IO server is initialized
-    if (globalSocketIOInstance) {
-      globalSocketIOInstance.emit('newTask', task);
-      console.log('Emitted "newTask" event via WebSocket:', task.id);
+    if (io) {
+      io.emit('newTask', task);
+      console.log('[POST /api/tasks] Emitted "newTask" event via WebSocket:', task.id);
     } else {
-      console.warn('Socket.IO server not initialized. Cannot emit "newTask" event.');
+      console.warn('[POST /api/tasks] Socket.IO instance NOT FOUND globally. Cannot emit.');
     }
 
     return NextResponse.json(task, { status: 201 });
