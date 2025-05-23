@@ -9,6 +9,7 @@ export interface MessageType {
   createdAt: string;
   sender: UserMin; // Assuming API returns sender with id, name, email
   senderId: string;
+  taskId: string; // Added taskId field
   // parentId?: string | null; // For threading later
 }
 
@@ -64,12 +65,12 @@ export default function ChatMessageItem({ message, currentUser }: ChatMessageIte
           </div>
         )}
         {isCurrentUserMessage && ( // Add margin for current user's messages if avatar is not shown or shown differently
-            <div className="w-7 h-7 mr-2 flex-shrink-0"></div> // Placeholder for alignment or different avatar style
+            <div className="w-7 h-7 ml-2 flex-shrink-0"></div> // Changed from mr-2 to ml-2
         )}
 
         {/* Message Bubble */}
         <div
-          className={`p-2.5 rounded-lg ${
+          className={`p-2.5 rounded-lg shadow-sm ${
             isCurrentUserMessage
               ? 'bg-blue-500 text-white rounded-br-none'
               : 'bg-slate-200 text-slate-800 rounded-bl-none'
