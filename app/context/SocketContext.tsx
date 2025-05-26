@@ -1,17 +1,11 @@
-// app/context/SocketContext.tsx
 'use client';
 
 import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import io, { Socket } from 'socket.io-client';
-// Assuming ServerToClientEvents, ClientToServerEvents are defined correctly elsewhere if needed by client
-// For this file, we mainly need the CUSTOM_SOCKET_PATH if defined globally, or just use it directly.
-// Let's import it if defined in a shared place, or hardcode if simpler for this step.
-// For now, we will hardcode it here to match the server modification.
-// import { CUSTOM_SOCKET_PATH } from '@/lib/socket-io-server'; // Adjust path as needed
 
-const CUSTOM_SOCKET_PATH_CLIENT = '/api/mycustomsocket/'; // Ensure this EXACTLY matches the server path
+const CUSTOM_SOCKET_PATH_CLIENT = '/api/mycustomsocket/'; 
 
-interface AppSocket extends Socket {} // Simplified type for client
+interface AppSocket extends Socket {} 
 
 interface SocketContextType {
   socket: AppSocket | null;
@@ -33,39 +27,90 @@ export const SocketProvider = ({ children }: SocketProviderProps) => {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    // The GET request to /api/socketio is still useful to ensure the HTTP server has the io instance attached
-    // This doesn't change with the custom path for socket.io's engine.
-    // fetch('/api/socketio').catch(err => console.error("[SocketContext] Error pinging setup endpoint /api/socketio:", err));
+    console.log(`[SocketContext] Attempting to connect Socket.IO client.`);
+    console.log(`[SocketContext] Target path: ${CUSTOM_SOCKET_PATH_CLIENT}`);
+    // For Vercel/same-origin, omitting the URL (or using undefined/empty string)
+    // makes it connect to the current host, which is generally preferred.
+    // process.env.NEXT_PUBLIC_SITE_URL can be used if you have specific reasons,
+    // but ensure it's correctly configured in Vercel.
+    console.log(`[SocketContext] NEXT_PUBLIC_SITE_URL (if used): ${process.env.NEXT_PUBLIC_SITE_URL}`);
 
-    console.log(`[SocketContext] Attempting to connect Socket.IO client to path: ${CUSTOM_SOCKET_PATH_CLIENT}`);
-    
-    const newSocket = io(process.env.NEXT_PUBLIC_SITE_URL || '', {
-      path: CUSTOM_SOCKET_PATH_CLIENT, // Crucial: Use the same custom path as the server
-      reconnectionAttempts: 3,
-      timeout: 10000, // Increased timeout for debugging
-      transports: ['polling', 'websocket'],
+    const newSocket = io(undefined, { // Omitting URL connects to current host
+      path: CUSTOM_SOCKET_PATH_CLIENT,
+      reconnectionAttempts: 5, // Number of reconnection attempts
+      timeout: 10000,          // Connection timeout in ms
+      transports: ['polling', 'websocket'], // Start with polling, upgrade to WebSocket
+      // query: { clientVersion: "1.0.0" } // Example of custom query parameters
     });
 
     setSocket(newSocket);
 
     newSocket.on('connect', () => {
-      console.log('[SocketContext] Socket.IO Client Connected via custom path:', newSocket.id);
+      console.log('[SocketContext] Socket.IO Client Connected. ID:', newSocket.id, 'Transport:', newSocket.io.engine.transport.name);
       setIsConnected(true);
     });
 
     newSocket.on('disconnect', (reason) => {
-      console.log('[SocketContext] Socket.IO Client Disconnected (custom path):', reason);
+      console.warn('[SocketContext] Socket.IO Client Disconnected. Reason:', reason, 'Socket ID was:', newSocket.id);
       setIsConnected(false);
-      // if (reason === 'io server disconnect') { newSocket.connect(); }
+      // if (reason === 'io server disconnect') {
+      //   // This happens if the server explicitly disconnects the socket.
+      //   // newSocket.connect(); // You might want to reconnect here.
+      // }
     });
 
     newSocket.on('connect_error', (error) => {
-      console.error('[SocketContext] Socket.IO Connection Error (custom path):', error.message, error.name, error.cause || error);
+      console.error('[SocketContext] Socket.IO Connection Error. Details:', {
+        message: error.message,
+        name: error.name,
+        // @ts-ignore
+        description: error.description, // Often contains the underlying error
+        // @ts-ignore
+        cause: error.cause,
+        // @ts-ignore
+        data: error.data, // Additional data from the server, if any
+        stack: error.stack?.substring(0, 300) + "..." // First part of stack
+      });
       setIsConnected(false);
+    });
+    
+    // Engine.IO events for deeper debugging
+    if (newSocket.io && newSocket.io.engine) {
+      newSocket.io.engine.on('error', (error) => {
+        console.error('[SocketContext] Socket.IO Engine Error:', {
+          message: error,
+          // @ts-ignore
+          type: error.type, // e.g., 'TransportError'
+          // @ts-ignore
+          description: error.description, // e.g., the XHR error object
+          // @ts-ignore
+          cause: error.cause,
+        });
+      });
+    }
+    
+    newSocket.io.on('reconnect_attempt', (attempt) => {
+      console.log(`[SocketContext] Socket.IO Reconnect Attempt: ${attempt}`);
+    });
+
+    newSocket.io.on('reconnect_failed', () => {
+      console.error('[SocketContext] Socket.IO Reconnect Failed after all attempts.');
+    });
+    
+    newSocket.io.on('reconnect_error', (error) => {
+      console.error('[SocketContext] Socket.IO Reconnect Error. Details:', {
+        message: error.message,
+        name: error.name,
+        // @ts-ignore
+        description: error.description,
+        // @ts-ignore
+        cause: error.cause,
+        stack: error.stack?.substring(0, 300) + "..."
+      });
     });
 
     return () => {
-      console.log('[SocketContext] Disconnecting socket (custom path)...');
+      console.log('[SocketContext] Cleaning up: Disconnecting socket...', newSocket.id);
       newSocket.disconnect();
       setSocket(null);
       setIsConnected(false);
