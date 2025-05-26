@@ -1,7 +1,7 @@
 // app/context/SocketContext.tsx
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import io, { Socket } from 'socket.io-client';
 // Assuming ServerToClientEvents, ClientToServerEvents are defined correctly elsewhere if needed by client
 // For this file, we mainly need the CUSTOM_SOCKET_PATH if defined globally, or just use it directly.
@@ -35,14 +35,15 @@ export const SocketProvider = ({ children }: SocketProviderProps) => {
   useEffect(() => {
     // The GET request to /api/socketio is still useful to ensure the HTTP server has the io instance attached
     // This doesn't change with the custom path for socket.io's engine.
-    fetch('/api/socketio').catch(err => console.error("[SocketContext] Error pinging setup endpoint /api/socketio:", err));
+    // fetch('/api/socketio').catch(err => console.error("[SocketContext] Error pinging setup endpoint /api/socketio:", err));
 
     console.log(`[SocketContext] Attempting to connect Socket.IO client to path: ${CUSTOM_SOCKET_PATH_CLIENT}`);
     
-    const newSocket = io(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000', {
+    const newSocket = io(process.env.NEXT_PUBLIC_SITE_URL || '', {
       path: CUSTOM_SOCKET_PATH_CLIENT, // Crucial: Use the same custom path as the server
       reconnectionAttempts: 3,
       timeout: 10000, // Increased timeout for debugging
+      transports: ['polling', 'websocket'],
     });
 
     setSocket(newSocket);
