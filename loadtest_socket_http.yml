@@ -1,0 +1,69 @@
+config:
+  # Target for HTTP requests (your Next.js app on the VM)
+  target: "http://35.200.216.141/"
+  # Target for Socket.IO connections
+  socketio:
+    path: "/api/mycustomsocket/" # Path defined in your socket-io-server.ts and mycustomsocket.ts
+    # Omit `url` here if Artillery runs on a machine where it can resolve your app by the same hostname/IP
+    # If your GCP VM's port 3000 is exposed and accessible from your local machine, this is fine.
+    # If 'target' uses an IP, Socket.IO will also try to connect to that IP.
+  phases:
+    - duration: 60  # Warm-up: 1 minute
+      arrivalRate: 2 # Start with 2 new virtual users per second
+      name: "Warm-up"
+    - duration: 180 # Ramp-up: 3 minutes
+      arrivalRate: 2
+      rampTo: 10    # Ramp to 10 new virtual users per second
+      name: "Ramp-up load"
+    - duration: 300 # Sustained load: 5 minutes
+      arrivalRate: 10
+      name: "Sustained load"
+      
+  payload:
+    path: "user_data.csv" # Path to your CSV file
+    fields:
+      - "email"
+      - "userId"        # This is the senderId
+      - "targetTaskId"
+  defaults:
+    headers:
+      'Content-Type': 'application/json'
+  # Use the "socketio" engine for WebSocket parts of the scenario
+  engines:
+    socketio: {}
+
+scenarios:
+  - name: "User connects to chat, joins room, and sends messages"
+    engine: socketio # Specifies that this scenario can use socketio actions
+    flow:
+      # 1. Connect to Socket.IO (this happens implicitly if not specified, but good to be explicit)
+      #    The connection will use the 'target' (for hostname/IP) and 'config.socketio.path'.
+      - think: 0.5 # Small pause before connecting
+
+      # 2. Emit event to join the task-specific chat room
+      - emit:
+          channel: "join-task-chat" # Event name defined in socket-io-server.ts
+          data: "{{ targetTaskId }}" # Send the taskId from the CSV
+          # Optional: add a response listener if your server acknowledges room joins
+          # response:
+          #   channel: "joined-room-ack" # Example, if you implement this ack
+          #   data: "{{ targetTaskId }}"
+      - think: 1 # Pause for 1 second after joining room
+
+      # 3. Loop to send multiple HTTP POST messages
+      - loop:
+          - post:
+              url: "/api/tasks/{{ targetTaskId }}/messages"
+              json:
+                content: "Artillery message from {{ userId }} to task {{ targetTaskId }} - loop {{$loopCount}} at {{ $timestamp }}"
+                senderId: "{{ userId }}" # Use userId from CSV as senderId
+          - think: 1 # Simulate user sending 1 message per second
+        count: 30 # Each user sends 30 messages in this scenario
+
+      # 4. (Optional) Explicitly leave room and disconnect at the end of the user's scenario
+      # - emit:
+      #     channel: "leave-task-chat"
+      #     data: "{{ targetTaskId }}"
+      # - think: 0.5
+      # Implicitly, Artillery will close the socket when the virtual user finishes its scenario.
+      # Keeping it connected throughout the loop is the key for load simulation.

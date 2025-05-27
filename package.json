@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node server.js",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint"
@@ -11,6 +11,8 @@
   "dependencies": {
     "@prisma/client": "^6.8.2",
     "@socket.io/redis-adapter": "^8.3.0",
+    "axios": "^1.9.0",
+    "event-loop-lag": "^1.4.0",
     "ioredis": "^5.6.1",
     "next": "15.1.8",
     "react": "^19.0.0",
