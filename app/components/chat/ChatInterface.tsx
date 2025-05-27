@@ -88,7 +88,7 @@ export default function ChatInterface({ taskId, currentUser, onInputFocus }: Cha
         } else {
           console.log(`[ChatInterface] Received message for different task (${incomingMessage.taskId}), ignoring.`);
         }
-      };
+      }; 
 
       socket.on('new-chat-message', handleNewChatMessage); //
 
