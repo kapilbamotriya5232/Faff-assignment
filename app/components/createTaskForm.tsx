@@ -1,7 +1,7 @@
 // src/components/CreateTaskForm.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 interface User {
   id: string;
@@ -30,7 +30,7 @@ export default function CreateTaskForm({ currentUser, onTaskCreated }: CreateTas
         // This reuses the GET /api/users route, or you can create a dedicated one
         // For now, we assume GET /api/users (if extended) returns all users
         // or create a specific GET /api/users/all
-        const response = await fetch('/api/users/all'); // You'll need to implement this endpoint
+        const response = await fetch('/api/users/all/'); // You'll need to implement this endpoint
         if (response.ok) {
           setAllUsers(await response.json());
         } else {
@@ -65,7 +65,7 @@ export default function CreateTaskForm({ currentUser, onTaskCreated }: CreateTas
     };
 
     try {
-      const response = await fetch('/api/tasks', {
+      const response = await fetch('/api/tasks/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(taskData),

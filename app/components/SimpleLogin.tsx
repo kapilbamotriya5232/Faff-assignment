@@ -1,7 +1,7 @@
 // src/components/SimpleLogin.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 interface User {
   id: string;
@@ -23,7 +23,7 @@ export default function SimpleLogin({ onLoginSuccess }: SimpleLoginProps) {
     setError('');
     setLoading(true);
     try {
-      const response = await fetch(`/api/users?email=${encodeURIComponent(email)}`);
+      const response = await fetch(`/api/users/?email=${encodeURIComponent(email)}`);
       if (response.ok) {
         const user: User = await response.json();
         localStorage.setItem('currentUser', JSON.stringify(user));

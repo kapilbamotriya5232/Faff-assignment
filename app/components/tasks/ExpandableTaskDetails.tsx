@@ -63,7 +63,7 @@ export default function ExpandedTaskDetails({ task, allUsers, onTaskUpdate }: Ex
          [fieldNameInPayload]: value === '' ? null : value
     };
     try {
-      const response = await fetch(`/api/tasks/${task.id}`, {
+      const response = await fetch(`/api/tasks/${task.id}/`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
       if (!response.ok) { const errData = await response.json(); throw new Error(errData.error || `Update failed`); }

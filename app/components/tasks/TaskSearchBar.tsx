@@ -1,7 +1,7 @@
 // app/components/tasks/TaskSearchBar.tsx
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Task } from './TaskItem';
 
 interface TaskSearchBarProps {
@@ -35,7 +35,7 @@ export default function TaskSearchBar({ onSearchResults, onClearSearch }: TaskSe
 
       setIsLoading(true); setError(null);
       try {
-        const response = await fetch(`/api/tasks/search?q=${encodeURIComponent(currentQuery)}`);
+        const response = await fetch(`/api/tasks/search/?q=${encodeURIComponent(currentQuery)}`);
         if (!response.ok) {
           const errData = await response.json();
           throw new Error(errData.error || 'Search failed');

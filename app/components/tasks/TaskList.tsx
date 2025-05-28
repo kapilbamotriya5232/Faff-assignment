@@ -59,7 +59,7 @@ export default function TaskList({
         queryParams.append('assignedToId', currentFilters.assignedToId)
 
       try {
-        const response = await fetch(`/api/tasks?${queryParams.toString()}`)
+        const response = await fetch(`/api/tasks/?${queryParams.toString()}`)
         if (!response.ok) {
           const errData = await response.json()
           throw new Error(errData.error || `Error: ${response.statusText}`)

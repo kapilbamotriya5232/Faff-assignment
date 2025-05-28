@@ -32,7 +32,7 @@ export default function ChatInterface({ taskId, currentUser, onInputFocus }: Cha
     if (!taskId) return;
     setIsLoadingMessages(true); setError(null);
     try {
-      const response = await fetch(`/api/tasks/${taskId}/messages`); //
+      const response = await fetch(`/api/tasks/${taskId}/messages/`); //
       if (!response.ok) {
         const errData = await response.json();
         console.error("Fetch messages API error:", errData);
@@ -131,15 +131,19 @@ export default function ChatInterface({ taskId, currentUser, onInputFocus }: Cha
         content: messageToSend,
         senderId: currentUser.id,
       };
-      const response = await fetch(`/api/tasks/${taskId}/messages`, { //
+      const response = await fetch(`/api/tasks/${taskId}/messages/`, { //
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const savedMessage: MessageType = await response.json(); 
-      if (!response.ok) { // Check after parsing, as error might be in JSON
-        throw new Error(savedMessage.error || 'Failed to send message'); //
+      
+      if (!response.ok) { // Check response.ok before parsing JSON
+        const errData = await response.json(); // Parse error response
+        throw new Error(errData.error || 'Failed to send message'); 
       }
+
+      const savedMessage: MessageType = await response.json(); // Parse success response
+
       setMessages(prevMessages =>  //
         prevMessages.map(msg => msg.id === tempId ? savedMessage : msg)
       );

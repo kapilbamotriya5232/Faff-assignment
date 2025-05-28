@@ -39,7 +39,7 @@ export default function HomePage() {
 
   const fetchAllUsers = useCallback(async () => { 
     try {
-      const response = await fetch('/api/users/all');
+      const response = await fetch('/api/users/all/');
       if (response.ok) setAllUsers(await response.json());
       else { console.error('Failed to fetch all users'); setAllUsers([]); }
     } catch (err) { console.error('Error fetching all users:', err); setAllUsers([]); }
