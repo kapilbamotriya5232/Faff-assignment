@@ -1,4 +1,4 @@
-import type { NextConfig } from 'next'
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   webpack: (config, { isServer }) => {
@@ -12,14 +12,15 @@ const nextConfig: NextConfig = {
       }
 
       config.externals.push('sharp'); 
-      
+      config.externals.push('onnxruntime-node');
+
       // For .node files, you might also need a specific loader rule
       // or to ensure they are correctly handled by the node-loader.
       // However, often marking the parent module as external is enough.
-      // config.module.rules.push({
-      //   test: /\.node$/,
-      //   loader: 'node-loader',
-      // });
+      config.module.rules.push({
+        test: /\\.node$/,
+        loader: 'node-loader',
+      });
     }
     return config;
   },
