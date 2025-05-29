@@ -1,6 +1,6 @@
 config:
   # Target for HTTP requests (your Next.js app on the VM)
-  target: "http://35.200.216.141/"
+  target: "http://35.200.216.141"
   # Target for Socket.IO connections
   socketio:
     path: "/api/mycustomsocket/" # Path defined in your socket-io-server.ts and mycustomsocket.ts
@@ -8,16 +8,80 @@ config:
     # If your GCP VM's port 3000 is exposed and accessible from your local machine, this is fine.
     # If 'target' uses an IP, Socket.IO will also try to connect to that IP.
   phases:
-    - duration: 60  # Warm-up: 1 minute
-      arrivalRate: 2 # Start with 2 new virtual users per second
-      name: "Warm-up"
-    - duration: 180 # Ramp-up: 3 minutes
-      arrivalRate: 2
-      rampTo: 10    # Ramp to 10 new virtual users per second
-      name: "Ramp-up load"
-    - duration: 300 # Sustained load: 5 minutes
-      arrivalRate: 10
-      name: "Sustained load"
+    # This is setup for exp-1
+      # - duration: 120
+      #   arrivalRate: 1
+      #   name: "Final Base-line load"
+
+  
+    # this is setup for exp-2
+    # - duration: 180  # Warm-up: 1 minute
+    #   arrivalRate: 1 # Start with 1 new virtual users per second
+    #   rampTo: 2
+    #   name: "Ramp-up to moderate load"
+
+    # this is setup for exp-3
+      # - duration: 120 # 2 minutes ramp-up
+      #   arrivalRate: 1 # Start with 1 new VU per second
+      #   rampTo: 3    # Ramp up to 3 new VUs per second
+      #   name: "Ramp-up to higher load"
+      # - duration: 180 # 3 minutes sustained load
+      #   arrivalRate: 3    # Maintain 3 VUs per second arrival
+      #   name: "Sustained higher load"
+
+      # this is setup for exp-4
+      - duration: 120  # 2 minutes: Establish baseline
+        arrivalRate: 1
+        name: "Baseline before spike"
+      - duration: 60   # 1 minute: Ramp to spike
+        arrivalRate: 1
+        rampTo: 6      # Ramp to 6 new VUs/sec (targets ~180-210 RPS if system could handle it)
+        name: "Spike Load"
+      - duration: 120  # 2 minutes: Recovery phase
+        arrivalRate: 1
+        name: "Recovery after spike"
+
+
+    # # Setup for exp - 2 (gradual ramp up)
+    # - duration: 60
+    #   arrivalRate: 1  
+    #   name: "Initial Gentle Load"
+
+    # # 15 sec pause
+    # - pause: 15
+    #   name: "Pause after Initial Gentle Load"
+
+    # - duration: 180 # 3 minutes
+    #   arrivalRate: 2
+    #   rampTo: 10    # Ramp from 2 to 10 new VUs/sec
+    #   name: "Ramp Up 1"
+
+    # # 15 sec pause
+    # - pause: 15
+    #   name: "Pause after Ramp Up 1"
+
+    # - duration: 180 # 3 minutes
+    #   arrivalRate: 10
+    #   rampTo: 25    # Ramp from 10 to 25 new VUs/sec
+    #   name: "Ramp Up 2"
+
+    # # 15 sec pause
+    # - pause: 15
+    #   name: "Pause after Ramp Up 2"
+
+    # - duration: 180 # 3 minutes
+    #   arrivalRate: 25
+    #   rampTo: 50    # Ramp from 25 to 50 new VUs/sec (adjust 50 based on your e2-standard-2 expectations)
+    #   name: "Ramp Up 3 - Approaching Stress"
+      
+    # # 15 sec pause
+    # - pause: 15
+    #   name: "Pause after Ramp Up 3"
+    
+    # # Add more phases if the system handles 50 VUs/sec easily
+    # - duration: 300 # 5 minutes
+    #   arrivalRate: 50 # Or the highest stable rate from previous phase
+    #   name: "Sustained Stress Load"
       
   payload:
     path: "user_data.csv" # Path to your CSV file
@@ -53,7 +117,7 @@ scenarios:
       # 3. Loop to send multiple HTTP POST messages
       - loop:
           - post:
-              url: "/api/tasks/{{ targetTaskId }}/messages"
+              url: "/api/tasks/{{ targetTaskId }}/messages/"
               json:
                 content: "Artillery message from {{ userId }} to task {{ targetTaskId }} - loop {{$loopCount}} at {{ $timestamp }}"
                 senderId: "{{ userId }}" # Use userId from CSV as senderId

@@ -1,5 +1,4 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// prisma/schema.prisma
 
 generator client {
   provider = "prisma-client-js"
@@ -8,7 +7,10 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
 }
+
+// User, Task, Message models remain as you provided...
 
 model User {
   id            String    @id @default(cuid())
@@ -50,7 +52,6 @@ model Message {
   task      Task     @relation("TaskMessages", fields: [taskId], references: [id], onDelete: Cascade) // Matching explicit name, added onDelete
   taskId    String   // Foreign key to Task
 
-  // For threading (Phase 5)
   parentId  String?
   parent    Message? @relation("Replies", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   replies   Message[] @relation("Replies")
@@ -58,4 +59,49 @@ model Message {
   @@index([senderId])
   @@index([taskId])
   @@index([parentId])
+}
+
+// Models to be modified for semantic search
+model RealTask {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  tags        String[]
+  category    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  realMessages RealMessage[]
+
+  // Vector field for RealTask content (name + description + tags)
+  embedding   Unsupported("vector(384)")? // For all-MiniLM-L6-v2 (384 dimensions)
+
+  @@index([category])
+  // pgvector index will be created manually in a migration
+  // Example placeholder for Prisma, actual index via SQL:
+  // @@index([embedding], map: "idx_realtask_embedding", type: Ivfflat)
+}
+
+model RealMessage {
+  id        String   @id @default(cuid())
+  content   String
+  senderId  String   // Assuming this ID might not directly link to your User model, or could be a generic string ID
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  realTask   RealTask @relation(fields: [realTaskId], references: [id], onDelete: Cascade)
+  realTaskId String
+
+  parentId   String?
+  parent     RealMessage? @relation("RealReplies", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies    RealMessage[] @relation("RealReplies")
+
+  // Vector field for RealMessage content
+  embedding  Unsupported("vector(384)")? // For all-MiniLM-L6-v2
+
+  @@index([senderId])
+  @@index([realTaskId])
+  @@index([parentId])
+  // pgvector index will be created manually in a migration
+  // Example placeholder for Prisma, actual index via SQL:
+  // @@index([embedding], map: "idx_realmessage_embedding", type: Ivfflat)
 }
