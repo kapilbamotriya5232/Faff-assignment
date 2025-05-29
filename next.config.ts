@@ -7,15 +7,19 @@ const nextConfig: NextConfig = {
       // Add sharp (and its dependencies if needed) as an external
       // This tells Webpack to leave it as a require() statement
       // instead of trying to bundle it.
+      if (!config.externals) {
+        config.externals = [];
+      }
+
       config.externals.push('sharp'); 
       
       // For .node files, you might also need a specific loader rule
       // or to ensure they are correctly handled by the node-loader.
       // However, often marking the parent module as external is enough.
-      config.module.rules.push({
-        test: /\.node$/,
-        loader: 'node-loader',
-      });
+      // config.module.rules.push({
+      //   test: /\.node$/,
+      //   loader: 'node-loader',
+      // });
     }
     return config;
   },
